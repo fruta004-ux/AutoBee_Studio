@@ -1,65 +1,411 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect, useCallback } from "react"
+import { PasswordGate } from "@/components/password-gate"
+import { ProjectSelector } from "@/components/studio/project-selector"
+import { RefImagesPanel } from "@/components/studio/ref-images-panel"
+import { GeneratePanel } from "@/components/studio/generate-panel"
+import { Gallery } from "@/components/studio/gallery"
+import { Lightbox } from "@/components/studio/lightbox"
+
+interface Project {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+}
+
+interface RefImage {
+  id: string
+  project_id: string
+  storage_path: string
+  public_url: string
+  file_name: string
+  created_at: string
+}
+
+interface GeneratedImage {
+  id: string
+  project_id: string
+  prompt_text: string
+  storage_path: string
+  public_url: string
+  aspect_ratio: string
+  resolution: string
+  created_at: string
+}
 
 export default function Home() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [projectsLoading, setProjectsLoading] = useState(true)
+
+  const [refImages, setRefImages] = useState<RefImage[]>([])
+  const [refUploading, setRefUploading] = useState(false)
+
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
+  const [generating, setGenerating] = useState(false)
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<"view" | "select">("view")
+  const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null)
+  const [downloading, setDownloading] = useState(false)
+
+  const loadProjects = useCallback(async () => {
+    setProjectsLoading(true)
+    try {
+      const res = await fetch("/api/projects")
+      if (res.ok) {
+        const data = await res.json()
+        setProjects(data)
+      }
+    } catch (e) {
+      console.error("프로젝트 로드 실패:", e)
+    } finally {
+      setProjectsLoading(false)
+    }
+  }, [])
+
+  const loadRefImages = useCallback(async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/ref-images?projectId=${projectId}`)
+      if (res.ok) {
+        setRefImages(await res.json())
+      }
+    } catch (e) {
+      console.error("참조 이미지 로드 실패:", e)
+    }
+  }, [])
+
+  const loadGeneratedImages = useCallback(async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/generated-images?projectId=${projectId}`)
+      if (res.ok) {
+        setGeneratedImages(await res.json())
+      }
+    } catch (e) {
+      console.error("생성 이미지 로드 실패:", e)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadProjects()
+  }, [loadProjects])
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadRefImages(selectedProject.id)
+      loadGeneratedImages(selectedProject.id)
+      setSelectedIds(new Set())
+      setViewMode("view")
+    } else {
+      setRefImages([])
+      setGeneratedImages([])
+    }
+  }, [selectedProject, loadRefImages, loadGeneratedImages])
+
+  const handleCreateProject = async (name: string) => {
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      })
+      if (res.ok) {
+        const newProject = await res.json()
+        setProjects((prev) => [newProject, ...prev])
+        setSelectedProject(newProject)
+      }
+    } catch (e) {
+      console.error("프로젝트 생성 실패:", e)
+    }
+  }
+
+  const handleDeleteProject = async (id: string) => {
+    try {
+      const res = await fetch("/api/projects", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== id))
+        if (selectedProject?.id === id) {
+          setSelectedProject(null)
+        }
+      }
+    } catch (e) {
+      console.error("프로젝트 삭제 실패:", e)
+    }
+  }
+
+  const handleUploadRef = async (file: File) => {
+    if (!selectedProject) return
+    setRefUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("projectId", selectedProject.id)
+      formData.append("file", file)
+
+      const res = await fetch("/api/ref-images", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (res.ok) {
+        const newRef = await res.json()
+        setRefImages((prev) => [...prev, newRef])
+      } else {
+        const err = await res.json()
+        alert(err.error || "업로드 실패")
+      }
+    } catch (e) {
+      console.error("참조 이미지 업로드 실패:", e)
+    } finally {
+      setRefUploading(false)
+    }
+  }
+
+  const handleDeleteRef = async (id: string) => {
+    try {
+      const res = await fetch("/api/ref-images", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        setRefImages((prev) => prev.filter((r) => r.id !== id))
+      }
+    } catch (e) {
+      console.error("참조 이미지 삭제 실패:", e)
+    }
+  }
+
+  const handleGenerate = async (prompt: string, aspectRatio: string) => {
+    if (!selectedProject) return
+    setGenerating(true)
+    try {
+      const formData = new FormData()
+      formData.append("projectId", selectedProject.id)
+      formData.append("prompt", prompt)
+      formData.append("aspectRatio", aspectRatio)
+
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (res.ok) {
+        const newImage = await res.json()
+        setGeneratedImages((prev) => [newImage, ...prev])
+      } else {
+        const err = await res.json()
+        alert(err.error || "이미지 생성 실패")
+      }
+    } catch (e) {
+      console.error("이미지 생성 실패:", e)
+      alert("이미지 생성 중 오류가 발생했습니다")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleRegenerate = async (image: GeneratedImage) => {
+    setLightboxImage(null)
+
+    // 기존 이미지 삭제
+    try {
+      await fetch("/api/generated-images", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageIds: [image.id] }),
+      })
+      setGeneratedImages((prev) => prev.filter((img) => img.id !== image.id))
+    } catch (e) {
+      console.error("삭제 실패:", e)
+    }
+
+    // 같은 프롬프트로 재생성
+    await handleGenerate(image.prompt_text, image.aspect_ratio)
+  }
+
+  const handleDeleteImage = async (image: GeneratedImage) => {
+    setLightboxImage(null)
+    try {
+      const res = await fetch("/api/generated-images", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageIds: [image.id] }),
+      })
+      if (res.ok) {
+        setGeneratedImages((prev) => prev.filter((img) => img.id !== image.id))
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(image.id)
+          return next
+        })
+      }
+    } catch (e) {
+      console.error("이미지 삭제 실패:", e)
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`선택한 ${selectedIds.size}개 이미지를 삭제하시겠습니까?`)) return
+
+    try {
+      const res = await fetch("/api/generated-images", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageIds: Array.from(selectedIds) }),
+      })
+      if (res.ok) {
+        setGeneratedImages((prev) => prev.filter((img) => !selectedIds.has(img.id)))
+        setSelectedIds(new Set())
+      }
+    } catch (e) {
+      console.error("선택 삭제 실패:", e)
+    }
+  }
+
+  const handleDownloadSelected = async () => {
+    if (selectedIds.size === 0) return
+    setDownloading(true)
+
+    try {
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
+
+      const selected = generatedImages.filter((img) => selectedIds.has(img.id))
+
+      for (let i = 0; i < selected.length; i++) {
+        const img = selected[i]
+        const response = await fetch(img.public_url)
+        const blob = await response.blob()
+        zip.file(`${i + 1}.png`, blob)
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `studio-images-${Date.now()}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      if (confirm("다운로드한 이미지를 삭제하시겠습니까?")) {
+        await fetch("/api/generated-images", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageIds: Array.from(selectedIds) }),
+        })
+        setGeneratedImages((prev) => prev.filter((img) => !selectedIds.has(img.id)))
+        setSelectedIds(new Set())
+      } else {
+        setSelectedIds(new Set())
+      }
+    } catch (e) {
+      console.error("다운로드 실패:", e)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <PasswordGate>
+      <div className="min-h-screen bg-zinc-950 text-white">
+        {/* Header */}
+        <header className="border-b border-white/5 px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+                <span className="text-lg">🎨</span>
+              </div>
+              <h1 className="text-lg font-semibold">AutoBee Studio</h1>
+            </div>
+            {selectedProject && (
+              <span className="text-sm text-white/40">{selectedProject.name}</span>
+            )}
+          </div>
+        </header>
+
+        <div className="max-w-7xl mx-auto flex gap-6 p-6">
+          {/* Sidebar */}
+          <aside className="w-56 shrink-0 space-y-6">
+            <ProjectSelector
+              projects={projects}
+              selectedProject={selectedProject}
+              onSelect={setSelectedProject}
+              onCreate={handleCreateProject}
+              onDelete={handleDeleteProject}
+              loading={projectsLoading}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </aside>
+
+          {/* Main content */}
+          <main className="flex-1 min-w-0 space-y-6">
+            {!selectedProject ? (
+              <div className="flex items-center justify-center py-32 text-sm text-white/20">
+                좌측에서 프로젝트를 선택하거나 생성해주세요
+              </div>
+            ) : (
+              <>
+                <RefImagesPanel
+                  refImages={refImages}
+                  onUpload={handleUploadRef}
+                  onDelete={handleDeleteRef}
+                  uploading={refUploading}
+                  disabled={!selectedProject}
+                />
+
+                <div className="border-t border-white/5" />
+
+                <GeneratePanel
+                  onGenerate={handleGenerate}
+                  generating={generating}
+                  disabled={!selectedProject}
+                  refImageCount={refImages.length}
+                />
+
+                <div className="border-t border-white/5" />
+
+                <Gallery
+                  images={generatedImages}
+                  selectedIds={selectedIds}
+                  onToggleSelect={(id) => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(id)) next.delete(id)
+                      else next.add(id)
+                      return next
+                    })
+                  }}
+                  onSelectAll={() =>
+                    setSelectedIds(new Set(generatedImages.map((img) => img.id)))
+                  }
+                  onDeselectAll={() => setSelectedIds(new Set())}
+                  onImageClick={setLightboxImage}
+                  onDownload={handleDownloadSelected}
+                  onDeleteSelected={handleDeleteSelected}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  downloading={downloading}
+                />
+              </>
+            )}
+          </main>
         </div>
-      </main>
-    </div>
-  );
+
+        <Lightbox
+          image={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+          onRegenerate={handleRegenerate}
+          onDelete={handleDeleteImage}
+        />
+      </div>
+    </PasswordGate>
+  )
 }
