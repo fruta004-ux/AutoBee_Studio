@@ -139,17 +139,56 @@ export default function Home() {
     }
   }
 
+  const compressImage = (file: File, maxSize = 1200): Promise<{ base64: string; contentType: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement("canvas")
+          let w = img.width
+          let h = img.height
+
+          if (w > maxSize || h > maxSize) {
+            if (w > h) {
+              h = Math.round((h * maxSize) / w)
+              w = maxSize
+            } else {
+              w = Math.round((w * maxSize) / h)
+              h = maxSize
+            }
+          }
+
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext("2d")!
+          ctx.drawImage(img, 0, 0, w, h)
+
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85)
+          const base64 = dataUrl.split(",")[1]
+          resolve({ base64, contentType: "image/jpeg" })
+        }
+        img.src = e.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
   const handleUploadRef = async (file: File) => {
     if (!selectedProject) return
     setRefUploading(true)
     try {
-      const formData = new FormData()
-      formData.append("projectId", selectedProject.id)
-      formData.append("file", file)
+      const { base64, contentType } = await compressImage(file)
 
-      const res = await fetch("/api/ref-images", {
+      const res = await fetch("/api/ref-images/upload", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          fileName: file.name,
+          base64,
+          contentType,
+        }),
       })
 
       if (res.ok) {
