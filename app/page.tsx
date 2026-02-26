@@ -505,6 +505,7 @@ export default function Home() {
           onRegenerate={handleRegenerate}
           onDelete={handleDeleteImage}
           onEdit={handleEditImage}
+          editHistory={lightboxImage ? (editChains.get(lightboxImage.id)?.history || []) : []}
         />
       </div>
     </PasswordGate>
