@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X, RotateCcw, Trash2, Download, Pencil, Loader2, Send } from "lucide-react"
+import { X, RotateCcw, Trash2, Download, Pencil, Send } from "lucide-react"
 
 interface GeneratedImage {
   id: string
@@ -20,10 +20,9 @@ interface LightboxProps {
   onRegenerate: (image: GeneratedImage) => void
   onDelete: (image: GeneratedImage) => void
   onEdit: (image: GeneratedImage, editPrompt: string) => void
-  editing: boolean
 }
 
-export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit, editing }: LightboxProps) {
+export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit }: LightboxProps) {
   const [showEditInput, setShowEditInput] = useState(false)
   const [editPrompt, setEditPrompt] = useState("")
 
@@ -43,7 +42,7 @@ export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit, editi
   }
 
   const handleEdit = () => {
-    if (!editPrompt.trim() || editing) return
+    if (!editPrompt.trim()) return
     onEdit(image, editPrompt.trim())
     setEditPrompt("")
     setShowEditInput(false)
@@ -105,7 +104,6 @@ export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit, editi
         </button>
       </div>
 
-      {/* 수정 프롬프트 입력 */}
       {showEditInput && (
         <div
           className="absolute top-16 right-4 left-4 sm:left-auto sm:w-96 z-10"
@@ -124,18 +122,13 @@ export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit, editi
                   if (e.key === "Enter") handleEdit()
                 }}
                 autoFocus
-                disabled={editing}
               />
               <button
                 onClick={handleEdit}
-                disabled={!editPrompt.trim() || editing}
+                disabled={!editPrompt.trim()}
                 className="h-9 px-3 rounded-lg bg-white text-black text-sm font-medium hover:bg-white/90 disabled:opacity-30 flex items-center gap-1.5"
               >
-                {editing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5" />
-                )}
+                <Send className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -150,19 +143,10 @@ export function Lightbox({ image, onClose, onRegenerate, onDelete, onEdit, editi
         </div>
       )}
 
-      {editing && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <div className="bg-black/70 rounded-xl px-6 py-4 flex items-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-white" />
-            <span className="text-sm text-white">수정 중...</span>
-          </div>
-        </div>
-      )}
-
       <img
         src={image.public_url}
         alt=""
-        className={`max-w-full max-h-[calc(100vh-120px)] object-contain transition-opacity ${editing ? "opacity-50" : ""}`}
+        className="max-w-full max-h-[calc(100vh-120px)] object-contain"
         onClick={(e) => e.stopPropagation()}
       />
     </div>

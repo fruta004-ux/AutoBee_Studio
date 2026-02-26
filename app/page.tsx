@@ -271,6 +271,7 @@ export default function Home() {
 
   const handleEditImage = async (image: GeneratedImage, editPrompt: string) => {
     if (!selectedProject) return
+    setLightboxImage(null)
     setEditing(true)
     try {
       const formData = new FormData()
@@ -287,7 +288,6 @@ export default function Home() {
       if (res.ok) {
         const newImage = await res.json()
         setGeneratedImages((prev) => [newImage, ...prev])
-        setLightboxImage(newImage)
       } else {
         const err = await res.json()
         alert(err.error || "이미지 수정 실패")
@@ -441,6 +441,13 @@ export default function Home() {
                   refImageCount={refImages.length}
                 />
 
+                {editing && (
+                  <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 animate-pulse">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="text-sm text-white/60">이미지 수정 중...</span>
+                  </div>
+                )}
+
                 <div className="border-t border-white/5" />
 
                 <Gallery
@@ -476,7 +483,6 @@ export default function Home() {
           onRegenerate={handleRegenerate}
           onDelete={handleDeleteImage}
           onEdit={handleEditImage}
-          editing={editing}
         />
       </div>
     </PasswordGate>
