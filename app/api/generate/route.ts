@@ -68,7 +68,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { projectId, prompt, aspectRatio = "1:1", chatHistory } = body
+    const {
+      projectId,
+      prompt,
+      aspectRatio = "1:1",
+      editImageUrl,
+      editHistory,
+    } = body
 
     if (!projectId || !prompt?.trim()) {
       return NextResponse.json(
@@ -84,56 +90,44 @@ export async function POST(request: NextRequest) {
       .eq("project_id", projectId)
       .order("created_at", { ascending: true })
 
-    // contents 구성
-    let contents: any[] = []
+    const parts: any[] = []
 
-    if (chatHistory && Array.isArray(chatHistory) && chatHistory.length > 0) {
-      // 멀티턴: 이전 대화 히스토리를 그대로 사용
-      // chatHistory 형식: [{ role, imageUrl?, text? }, ...]
-      for (const turn of chatHistory) {
-        const turnParts: any[] = []
-
-        if (turn.imageUrl) {
-          try {
-            turnParts.push(await fetchImageAsInlineData(turn.imageUrl))
-          } catch (e) {
-            console.error("[studio] Failed to fetch history image", e)
-          }
-        }
-
-        if (turn.text) {
-          turnParts.push({ text: turn.text })
-        }
-
-        if (turnParts.length > 0) {
-          contents.push({ role: turn.role, parts: turnParts })
-        }
+    // 수정 모드: 수정 대상 이미지를 먼저 넣기
+    if (editImageUrl) {
+      try {
+        parts.push(await fetchImageAsInlineData(editImageUrl))
+      } catch (e) {
+        console.error("[studio] Failed to fetch edit source image", e)
       }
-
-      // 현재 사용자 메시지 추가
-      const currentParts: any[] = []
-      currentParts.push({ text: prompt })
-      contents.push({ role: "user", parts: currentParts })
-    } else {
-      // 첫 생성: 참조 이미지 + 프롬프트
-      const parts: any[] = []
-
-      if (refImages && refImages.length > 0) {
-        for (const ref of refImages) {
-          try {
-            parts.push(await fetchImageAsInlineData(ref.public_url))
-          } catch (e) {
-            console.error(`[studio] Failed to fetch ref image: ${ref.file_name}`, e)
-          }
-        }
-      }
-
-      parts.push({ text: prompt })
-      contents = [{ role: "user", parts }]
     }
 
+    // 참조 이미지 추가
+    if (refImages && refImages.length > 0) {
+      for (const ref of refImages) {
+        try {
+          parts.push(await fetchImageAsInlineData(ref.public_url))
+        } catch (e) {
+          console.error(`[studio] Failed to fetch ref image: ${ref.file_name}`, e)
+        }
+      }
+    }
+
+    // 수정 모드일 때 프롬프트에 수정 히스토리 컨텍스트 포함
+    let fullPrompt = prompt
+    if (editImageUrl && editHistory && editHistory.length > 0) {
+      const historyContext = editHistory
+        .map((h: string, i: number) => `수정 ${i + 1}: ${h}`)
+        .join("\n")
+      fullPrompt = `이전 수정 이력:\n${historyContext}\n\n새 수정 요청: ${prompt}\n\n위 이미지를 수정해주세요.`
+    } else if (editImageUrl) {
+      fullPrompt = `${prompt}\n\n위 이미지를 이 지시에 따라 수정해주세요.`
+    }
+
+    parts.push({ text: fullPrompt })
+
+    const isEdit = !!editImageUrl
     console.log(
-      `[studio] Generating: ${contents.length} turns, ${refImages?.length || 0} refs, ratio=${aspectRatio}`,
+      `[studio] ${isEdit ? "Editing" : "Generating"}: ${refImages?.length || 0} refs, ratio=${aspectRatio}${editHistory ? `, history=${editHistory.length}` : ""}`,
     )
 
     const result = await retryWithBackoff(async () => {
@@ -143,7 +137,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents,
+            contents: [{ role: "user", parts }],
             generationConfig: {
               responseModalities: ["TEXT", "IMAGE"],
               imageConfig: {

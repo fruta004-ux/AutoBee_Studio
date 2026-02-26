@@ -35,10 +35,10 @@ interface GeneratedImage {
   created_at: string
 }
 
-interface ChatTurn {
-  role: "user" | "model"
-  text?: string
-  imageUrl?: string
+interface EditChain {
+  sourceImageUrl: string
+  aspectRatio: string
+  history: string[]
 }
 
 export default function Home() {
@@ -57,7 +57,7 @@ export default function Home() {
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [chatHistories, setChatHistories] = useState<Map<string, ChatTurn[]>>(new Map())
+  const [editChains, setEditChains] = useState<Map<string, EditChain>>(new Map())
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -245,16 +245,6 @@ export default function Home() {
       if (res.ok) {
         const newImage = await res.json()
         setGeneratedImages((prev) => [newImage, ...prev])
-
-        // 새 이미지의 대화 히스토리 초기화
-        setChatHistories((prev) => {
-          const next = new Map(prev)
-          next.set(newImage.id, [
-            { role: "user", text: prompt },
-            { role: "model", imageUrl: newImage.public_url },
-          ])
-          return next
-        })
       } else {
         const err = await res.json()
         alert(err.error || "이미지 생성 실패")
@@ -290,11 +280,9 @@ export default function Home() {
     setLightboxImage(null)
     setEditing(true)
     try {
-      // 기존 대화 히스토리 가져오기 (없으면 원본 이미지 기반으로 생성)
-      const existingHistory = chatHistories.get(image.id) || [
-        { role: "user" as const, text: image.prompt_text },
-        { role: "model" as const, imageUrl: image.public_url },
-      ]
+      // 이전 수정 체인이 있으면 히스토리 가져오기
+      const existingChain = editChains.get(image.id)
+      const editHistory = existingChain ? [...existingChain.history] : []
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -302,8 +290,9 @@ export default function Home() {
         body: JSON.stringify({
           projectId: selectedProject.id,
           prompt: editPrompt,
-          aspectRatio: image.aspect_ratio,
-          chatHistory: existingHistory,
+          aspectRatio: image.aspect_ratio || "1:1",
+          editImageUrl: image.public_url,
+          editHistory: editHistory.length > 0 ? editHistory : undefined,
         }),
       })
 
@@ -311,14 +300,14 @@ export default function Home() {
         const newImage = await res.json()
         setGeneratedImages((prev) => [newImage, ...prev])
 
-        // 새 이미지에 연장된 대화 히스토리 저장
-        setChatHistories((prev) => {
+        // 수정 체인 이어가기: 항상 최신 이미지 URL을 source로 사용
+        setEditChains((prev) => {
           const next = new Map(prev)
-          next.set(newImage.id, [
-            ...existingHistory,
-            { role: "user", text: editPrompt },
-            { role: "model", imageUrl: newImage.public_url },
-          ])
+          next.set(newImage.id, {
+            sourceImageUrl: newImage.public_url,
+            aspectRatio: image.aspect_ratio || "1:1",
+            history: [...editHistory, editPrompt],
+          })
           return next
         })
       } else {
