@@ -275,12 +275,11 @@ export default function Home() {
     await handleGenerate(image.prompt_text, image.aspect_ratio || "1:1")
   }
 
-  const handleEditImage = async (image: GeneratedImage, editPrompt: string) => {
+  const handleEditImage = async (image: GeneratedImage, editPrompt: string, prevImageUrl?: string) => {
     if (!selectedProject) return
     setLightboxImage(null)
     setEditing(true)
     try {
-      // 이전 수정 체인이 있으면 히스토리 가져오기
       const existingChain = editChains.get(image.id)
       const editHistory = existingChain ? [...existingChain.history] : []
 
@@ -293,6 +292,7 @@ export default function Home() {
           aspectRatio: image.aspect_ratio || "1:1",
           editImageUrl: image.public_url,
           editHistory: editHistory.length > 0 ? editHistory : undefined,
+          prevImageUrl,
         }),
       })
 
@@ -501,7 +501,9 @@ export default function Home() {
 
         <Lightbox
           image={lightboxImage}
+          images={generatedImages}
           onClose={() => setLightboxImage(null)}
+          onNavigate={setLightboxImage}
           onRegenerate={handleRegenerate}
           onDelete={handleDeleteImage}
           onEdit={handleEditImage}

@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       aspectRatio = "1:1",
       editImageUrl,
       editHistory,
+      prevImageUrl,
     } = body
 
     if (!projectId || !prompt?.trim()) {
@@ -92,7 +93,16 @@ export async function POST(request: NextRequest) {
 
     const parts: any[] = []
 
-    // 수정 모드: 수정 대상 이미지를 먼저 넣기
+    // 직전 컷 참고
+    if (prevImageUrl) {
+      try {
+        parts.push(await fetchImageAsInlineData(prevImageUrl))
+      } catch (e) {
+        console.error("[studio] Failed to fetch prev image", e)
+      }
+    }
+
+    // 수정 모드: 수정 대상 이미지
     if (editImageUrl) {
       try {
         parts.push(await fetchImageAsInlineData(editImageUrl))
@@ -118,9 +128,9 @@ export async function POST(request: NextRequest) {
       const historyContext = editHistory
         .map((h: string, i: number) => `수정 ${i + 1}: ${h}`)
         .join("\n")
-      fullPrompt = `이전 수정 이력:\n${historyContext}\n\n새 수정 요청: ${prompt}\n\n위 이미지를 수정해주세요.`
+      fullPrompt = `이전 수정 이력:\n${historyContext}\n\n새 수정 요청: ${prompt}\n\n${prevImageUrl ? "첫 번째 이미지는 직전 컷(참고용)이고, 두 번째 이미지를" : "위 이미지를"} 수정해주세요.`
     } else if (editImageUrl) {
-      fullPrompt = `${prompt}\n\n위 이미지를 이 지시에 따라 수정해주세요.`
+      fullPrompt = `${prompt}\n\n${prevImageUrl ? "첫 번째 이미지는 직전 컷(참고용)이고, 두 번째 이미지를" : "위 이미지를"} 이 지시에 따라 수정해주세요.`
     }
 
     parts.push({ text: fullPrompt })
