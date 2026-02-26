@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const projectId = request.nextUrl.searchParams.get("projectId")
 
     if (!projectId) {

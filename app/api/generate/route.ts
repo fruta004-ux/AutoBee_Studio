@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -49,6 +49,7 @@ async function retryWithBackoff<T>(
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
 
     if (!apiKey) {
@@ -70,14 +71,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 참조 이미지 가져오기
     const { data: refImages } = await supabase
       .from("studio_ref_images")
       .select("public_url, file_name")
       .eq("project_id", projectId)
       .order("created_at", { ascending: true })
 
-    // Gemini API parts 구성
     const parts: any[] = []
 
     if (refImages && refImages.length > 0) {
@@ -156,7 +155,6 @@ export async function POST(request: NextRequest) {
     const mimeType = imagePart.inlineData.mimeType
     const ext = mimeType.split("/")[1] || "png"
 
-    // Supabase Storage에 저장
     const timestamp = Date.now()
     const randomId = Math.random().toString(36).substring(7)
     const storagePath = `${projectId}/${timestamp}-${randomId}.${ext}`
@@ -171,7 +169,6 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error("[studio] Upload error:", uploadError)
-      // 로그: 실패
       await supabase.from("studio_generation_logs").insert({
         project_id: projectId,
         prompt_text: prompt,
@@ -206,7 +203,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "DB 저장 실패" }, { status: 500 })
     }
 
-    // 로그: 성공
     await supabase.from("studio_generation_logs").insert({
       project_id: projectId,
       prompt_text: prompt,
@@ -217,8 +213,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[studio] Generate error:", error)
 
-    // 로그: 실패
     try {
+      const supabase = getSupabase()
       const formData = await request.clone().formData()
       const projectId = formData.get("projectId") as string
       const prompt = formData.get("prompt") as string

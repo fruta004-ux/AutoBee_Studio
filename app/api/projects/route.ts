@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
+    const supabase = getSupabase()
     const { data, error } = await supabase
       .from("studio_projects")
       .select("*")
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "프로젝트 이름은 필수입니다" }, { status: 400 })
     }
 
+    const supabase = getSupabase()
     const { data, error } = await supabase
       .from("studio_projects")
       .insert({ name: name.trim(), description: description?.trim() || null })
@@ -57,6 +59,8 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: "프로젝트 ID가 필요합니다" }, { status: 400 })
     }
+
+    const supabase = getSupabase()
 
     // 연관된 참조 이미지 스토리지 파일 삭제
     const { data: refImages } = await supabase

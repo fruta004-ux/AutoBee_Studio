@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const projectId = request.nextUrl.searchParams.get("projectId")
 
     if (!projectId) {
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const formData = await request.formData()
     const projectId = formData.get("projectId") as string
     const file = formData.get("file") as File
@@ -40,7 +42,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "projectId와 file이 필요합니다" }, { status: 400 })
     }
 
-    // 현재 참조 이미지 개수 확인
     const { count } = await supabase
       .from("studio_ref_images")
       .select("*", { count: "exact", head: true })
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const { id } = await request.json()
 
     if (!id) {
