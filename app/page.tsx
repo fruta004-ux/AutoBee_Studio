@@ -50,6 +50,7 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"view" | "select">("view")
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -268,6 +269,37 @@ export default function Home() {
     await handleGenerate(image.prompt_text, image.aspect_ratio)
   }
 
+  const handleEditImage = async (image: GeneratedImage, editPrompt: string) => {
+    if (!selectedProject) return
+    setEditing(true)
+    try {
+      const formData = new FormData()
+      formData.append("projectId", selectedProject.id)
+      formData.append("prompt", editPrompt)
+      formData.append("aspectRatio", image.aspect_ratio)
+      formData.append("editImageUrl", image.public_url)
+
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (res.ok) {
+        const newImage = await res.json()
+        setGeneratedImages((prev) => [newImage, ...prev])
+        setLightboxImage(newImage)
+      } else {
+        const err = await res.json()
+        alert(err.error || "이미지 수정 실패")
+      }
+    } catch (e) {
+      console.error("이미지 수정 실패:", e)
+      alert("이미지 수정 중 오류가 발생했습니다")
+    } finally {
+      setEditing(false)
+    }
+  }
+
   const handleDeleteImage = async (image: GeneratedImage) => {
     setLightboxImage(null)
     try {
@@ -443,6 +475,8 @@ export default function Home() {
           onClose={() => setLightboxImage(null)}
           onRegenerate={handleRegenerate}
           onDelete={handleDeleteImage}
+          onEdit={handleEditImage}
+          editing={editing}
         />
       </div>
     </PasswordGate>

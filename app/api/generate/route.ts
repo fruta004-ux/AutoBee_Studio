@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
     const projectId = formData.get("projectId") as string
     const prompt = formData.get("prompt") as string
     const aspectRatio = (formData.get("aspectRatio") as string) || "1:1"
+    const editImageUrl = formData.get("editImageUrl") as string | null
 
     if (!projectId || !prompt?.trim()) {
       return NextResponse.json(
@@ -71,13 +72,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const parts: any[] = []
+
+    // 수정 모드: 기존 이미지를 첫 번째로 넣기
+    if (editImageUrl) {
+      try {
+        const imgResponse = await fetch(editImageUrl)
+        const arrayBuffer = await imgResponse.arrayBuffer()
+        const base64 = Buffer.from(arrayBuffer).toString("base64")
+        const contentType = imgResponse.headers.get("content-type") || "image/png"
+
+        parts.push({
+          inlineData: { mimeType: contentType, data: base64 },
+        })
+      } catch (e) {
+        console.error("[studio] Failed to fetch edit source image", e)
+      }
+    }
+
+    // 참조 이미지 추가
     const { data: refImages } = await supabase
       .from("studio_ref_images")
       .select("public_url, file_name")
       .eq("project_id", projectId)
       .order("created_at", { ascending: true })
-
-    const parts: any[] = []
 
     if (refImages && refImages.length > 0) {
       for (const ref of refImages) {
@@ -89,10 +107,7 @@ export async function POST(request: NextRequest) {
             imgResponse.headers.get("content-type") || "image/png"
 
           parts.push({
-            inlineData: {
-              mimeType: contentType,
-              data: base64,
-            },
+            inlineData: { mimeType: contentType, data: base64 },
           })
         } catch (e) {
           console.error(`[studio] Failed to fetch ref image: ${ref.file_name}`, e)
