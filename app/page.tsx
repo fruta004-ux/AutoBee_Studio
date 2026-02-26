@@ -35,6 +35,12 @@ interface GeneratedImage {
   created_at: string
 }
 
+interface ChatTurn {
+  role: "user" | "model"
+  text?: string
+  imageUrl?: string
+}
+
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
@@ -51,6 +57,7 @@ export default function Home() {
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [chatHistories, setChatHistories] = useState<Map<string, ChatTurn[]>>(new Map())
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -225,19 +232,29 @@ export default function Home() {
     if (!selectedProject) return
     setGenerating(true)
     try {
-      const formData = new FormData()
-      formData.append("projectId", selectedProject.id)
-      formData.append("prompt", prompt)
-      formData.append("aspectRatio", aspectRatio)
-
       const res = await fetch("/api/generate", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          prompt,
+          aspectRatio,
+        }),
       })
 
       if (res.ok) {
         const newImage = await res.json()
         setGeneratedImages((prev) => [newImage, ...prev])
+
+        // 새 이미지의 대화 히스토리 초기화
+        setChatHistories((prev) => {
+          const next = new Map(prev)
+          next.set(newImage.id, [
+            { role: "user", text: prompt },
+            { role: "model", imageUrl: newImage.public_url },
+          ])
+          return next
+        })
       } else {
         const err = await res.json()
         alert(err.error || "이미지 생성 실패")
@@ -265,8 +282,7 @@ export default function Home() {
       console.error("삭제 실패:", e)
     }
 
-    // 같은 프롬프트로 재생성
-    await handleGenerate(image.prompt_text, image.aspect_ratio)
+    await handleGenerate(image.prompt_text, image.aspect_ratio || "1:1")
   }
 
   const handleEditImage = async (image: GeneratedImage, editPrompt: string) => {
@@ -274,20 +290,37 @@ export default function Home() {
     setLightboxImage(null)
     setEditing(true)
     try {
-      const formData = new FormData()
-      formData.append("projectId", selectedProject.id)
-      formData.append("prompt", editPrompt)
-      formData.append("aspectRatio", image.aspect_ratio)
-      formData.append("editImageUrl", image.public_url)
+      // 기존 대화 히스토리 가져오기 (없으면 원본 이미지 기반으로 생성)
+      const existingHistory = chatHistories.get(image.id) || [
+        { role: "user" as const, text: image.prompt_text },
+        { role: "model" as const, imageUrl: image.public_url },
+      ]
 
       const res = await fetch("/api/generate", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          prompt: editPrompt,
+          aspectRatio: image.aspect_ratio,
+          chatHistory: existingHistory,
+        }),
       })
 
       if (res.ok) {
         const newImage = await res.json()
         setGeneratedImages((prev) => [newImage, ...prev])
+
+        // 새 이미지에 연장된 대화 히스토리 저장
+        setChatHistories((prev) => {
+          const next = new Map(prev)
+          next.set(newImage.id, [
+            ...existingHistory,
+            { role: "user", text: editPrompt },
+            { role: "model", imageUrl: newImage.public_url },
+          ])
+          return next
+        })
       } else {
         const err = await res.json()
         alert(err.error || "이미지 수정 실패")

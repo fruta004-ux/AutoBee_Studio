@@ -47,6 +47,14 @@ async function retryWithBackoff<T>(
   throw lastError
 }
 
+async function fetchImageAsInlineData(url: string) {
+  const response = await fetch(url)
+  const arrayBuffer = await response.arrayBuffer()
+  const base64 = Buffer.from(arrayBuffer).toString("base64")
+  const contentType = response.headers.get("content-type") || "image/png"
+  return { inlineData: { mimeType: contentType, data: base64 } }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase()
@@ -59,11 +67,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const formData = await request.formData()
-    const projectId = formData.get("projectId") as string
-    const prompt = formData.get("prompt") as string
-    const aspectRatio = (formData.get("aspectRatio") as string) || "1:1"
-    const editImageUrl = formData.get("editImageUrl") as string | null
+    const body = await request.json()
+    const { projectId, prompt, aspectRatio = "1:1", chatHistory } = body
 
     if (!projectId || !prompt?.trim()) {
       return NextResponse.json(
@@ -72,53 +77,63 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const parts: any[] = []
-
-    // 수정 모드: 기존 이미지를 첫 번째로 넣기
-    if (editImageUrl) {
-      try {
-        const imgResponse = await fetch(editImageUrl)
-        const arrayBuffer = await imgResponse.arrayBuffer()
-        const base64 = Buffer.from(arrayBuffer).toString("base64")
-        const contentType = imgResponse.headers.get("content-type") || "image/png"
-
-        parts.push({
-          inlineData: { mimeType: contentType, data: base64 },
-        })
-      } catch (e) {
-        console.error("[studio] Failed to fetch edit source image", e)
-      }
-    }
-
-    // 참조 이미지 추가
+    // 참조 이미지 가져오기
     const { data: refImages } = await supabase
       .from("studio_ref_images")
       .select("public_url, file_name")
       .eq("project_id", projectId)
       .order("created_at", { ascending: true })
 
-    if (refImages && refImages.length > 0) {
-      for (const ref of refImages) {
-        try {
-          const imgResponse = await fetch(ref.public_url)
-          const arrayBuffer = await imgResponse.arrayBuffer()
-          const base64 = Buffer.from(arrayBuffer).toString("base64")
-          const contentType =
-            imgResponse.headers.get("content-type") || "image/png"
+    // contents 구성
+    let contents: any[] = []
 
-          parts.push({
-            inlineData: { mimeType: contentType, data: base64 },
-          })
-        } catch (e) {
-          console.error(`[studio] Failed to fetch ref image: ${ref.file_name}`, e)
+    if (chatHistory && Array.isArray(chatHistory) && chatHistory.length > 0) {
+      // 멀티턴: 이전 대화 히스토리를 그대로 사용
+      // chatHistory 형식: [{ role, imageUrl?, text? }, ...]
+      for (const turn of chatHistory) {
+        const turnParts: any[] = []
+
+        if (turn.imageUrl) {
+          try {
+            turnParts.push(await fetchImageAsInlineData(turn.imageUrl))
+          } catch (e) {
+            console.error("[studio] Failed to fetch history image", e)
+          }
+        }
+
+        if (turn.text) {
+          turnParts.push({ text: turn.text })
+        }
+
+        if (turnParts.length > 0) {
+          contents.push({ role: turn.role, parts: turnParts })
         }
       }
+
+      // 현재 사용자 메시지 추가
+      const currentParts: any[] = []
+      currentParts.push({ text: prompt })
+      contents.push({ role: "user", parts: currentParts })
+    } else {
+      // 첫 생성: 참조 이미지 + 프롬프트
+      const parts: any[] = []
+
+      if (refImages && refImages.length > 0) {
+        for (const ref of refImages) {
+          try {
+            parts.push(await fetchImageAsInlineData(ref.public_url))
+          } catch (e) {
+            console.error(`[studio] Failed to fetch ref image: ${ref.file_name}`, e)
+          }
+        }
+      }
+
+      parts.push({ text: prompt })
+      contents = [{ role: "user", parts }]
     }
 
-    parts.push({ text: prompt })
-
     console.log(
-      `[studio] Generating with ${refImages?.length || 0} ref images, ratio=${aspectRatio}`,
+      `[studio] Generating: ${contents.length} turns, ${refImages?.length || 0} refs, ratio=${aspectRatio}`,
     )
 
     const result = await retryWithBackoff(async () => {
@@ -128,7 +143,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ role: "user", parts }],
+            contents,
             generationConfig: {
               responseModalities: ["TEXT", "IMAGE"],
               imageConfig: {
@@ -230,13 +245,11 @@ export async function POST(request: NextRequest) {
 
     try {
       const supabase = getSupabase()
-      const formData = await request.clone().formData()
-      const projectId = formData.get("projectId") as string
-      const prompt = formData.get("prompt") as string
-      if (projectId) {
+      const body = await request.clone().json()
+      if (body.projectId) {
         await supabase.from("studio_generation_logs").insert({
-          project_id: projectId,
-          prompt_text: prompt || "",
+          project_id: body.projectId,
+          prompt_text: body.prompt || "",
           status: "fail",
         })
       }
