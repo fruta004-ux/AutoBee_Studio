@@ -7,6 +7,7 @@ import { RefImagesPanel } from "@/components/studio/ref-images-panel"
 import { GeneratePanel } from "@/components/studio/generate-panel"
 import { Gallery } from "@/components/studio/gallery"
 import { Lightbox } from "@/components/studio/lightbox"
+import { StatsPanel } from "@/components/studio/stats-panel"
 
 interface Project {
   id: string
@@ -58,6 +59,7 @@ export default function Home() {
   const [downloading, setDownloading] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editChains, setEditChains] = useState<Map<string, EditChain>>(new Map())
+  const [statsOpen, setStatsOpen] = useState(false)
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -419,9 +421,20 @@ export default function Home() {
               </div>
               <h1 className="text-lg font-semibold">AutoBee Studio</h1>
             </div>
-            {selectedProject && (
-              <span className="text-sm text-white/40">{selectedProject.name}</span>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedProject && (
+                <span className="text-sm text-white/40">{selectedProject.name}</span>
+              )}
+              {selectedProject && (
+                <button
+                  onClick={() => setStatsOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-xs text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                  통계
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -508,6 +521,13 @@ export default function Home() {
           onDelete={handleDeleteImage}
           onEdit={handleEditImage}
           editHistory={lightboxImage ? (editChains.get(lightboxImage.id)?.history || []) : []}
+        />
+
+        <StatsPanel
+          projectId={selectedProject?.id || null}
+          projectName={selectedProject?.name}
+          open={statsOpen}
+          onClose={() => setStatsOpen(false)}
         />
       </div>
     </PasswordGate>
