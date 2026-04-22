@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { X, RotateCcw, Trash2, Download, Pencil, Send, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useEffect } from "react"
+import { X, RotateCcw, Trash2, Download, Pencil, Send, ChevronLeft, ChevronRight, ImagePlus, Check } from "lucide-react"
 
 interface GeneratedImage {
   id: string
@@ -22,6 +22,7 @@ interface LightboxProps {
   onRegenerate: (image: GeneratedImage) => void
   onDelete: (image: GeneratedImage) => void
   onEdit: (image: GeneratedImage, editPrompt: string, prevImageUrl?: string) => void
+  onAddToRefs: (image: GeneratedImage) => Promise<boolean>
   editHistory?: string[]
 }
 
@@ -33,13 +34,31 @@ export function Lightbox({
   onRegenerate,
   onDelete,
   onEdit,
+  onAddToRefs,
   editHistory = [],
 }: LightboxProps) {
   const [showEditPanel, setShowEditPanel] = useState(false)
   const [editPrompt, setEditPrompt] = useState("")
   const [usePrevImage, setUsePrevImage] = useState(false)
+  const [addingRef, setAddingRef] = useState(false)
+  const [addedRef, setAddedRef] = useState(false)
+
+  useEffect(() => {
+    setAddedRef(false)
+  }, [image?.id])
 
   if (!image) return null
+
+  const handleAddToRefs = async () => {
+    if (addingRef || addedRef) return
+    setAddingRef(true)
+    const ok = await onAddToRefs(image)
+    setAddingRef(false)
+    if (ok) {
+      setAddedRef(true)
+      setTimeout(() => setAddedRef(false), 2000)
+    }
+  }
 
   const currentIndex = images.findIndex((img) => img.id === image.id)
   const prevImage = currentIndex < images.length - 1 ? images[currentIndex + 1] : null
@@ -214,6 +233,27 @@ export function Lightbox({
           title="수정"
         >
           <Pencil className="w-4 h-4 text-white" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleAddToRefs()
+          }}
+          disabled={addingRef || addedRef}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+            addedRef
+              ? "bg-green-500/30 hover:bg-green-500/30"
+              : "bg-white/10 hover:bg-white/20"
+          } disabled:cursor-not-allowed`}
+          title={addedRef ? "참조에 추가됨" : "참조 이미지로 추가"}
+        >
+          {addedRef ? (
+            <Check className="w-4 h-4 text-green-300" />
+          ) : addingRef ? (
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <ImagePlus className="w-4 h-4 text-white" />
+          )}
         </button>
         <button
           onClick={(e) => {

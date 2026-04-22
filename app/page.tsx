@@ -370,6 +370,37 @@ export default function Home() {
     }
   }
 
+  const handleAddToRefs = async (image: GeneratedImage): Promise<boolean> => {
+    if (!selectedProject) return false
+    if (refImages.length >= 14) {
+      alert("참조 이미지는 최대 14장까지 가능합니다")
+      return false
+    }
+    try {
+      const res = await fetch("/api/ref-images/from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          imageUrl: image.public_url,
+        }),
+      })
+      if (res.ok) {
+        const newRef = await res.json()
+        setRefImages((prev) => [...prev, newRef])
+        return true
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || "참조 추가 실패")
+        return false
+      }
+    } catch (e) {
+      console.error("참조 추가 실패:", e)
+      alert("참조 추가 중 오류가 발생했습니다")
+      return false
+    }
+  }
+
   const handleDeleteImage = async (image: GeneratedImage) => {
     setLightboxImage(null)
     try {
@@ -567,6 +598,7 @@ export default function Home() {
           onRegenerate={handleRegenerate}
           onDelete={handleDeleteImage}
           onEdit={handleEditImage}
+          onAddToRefs={handleAddToRefs}
           editHistory={lightboxImage ? (editChains.get(lightboxImage.id)?.history || []) : []}
         />
 
