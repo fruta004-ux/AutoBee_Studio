@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { PasswordGate } from "@/components/password-gate"
 import { ProjectSelector } from "@/components/studio/project-selector"
 import { RefImagesPanel } from "@/components/studio/ref-images-panel"
-import { GeneratePanel } from "@/components/studio/generate-panel"
+import { GeneratePanel, type BatchJob } from "@/components/studio/generate-panel"
 import { Gallery } from "@/components/studio/gallery"
 import { Lightbox } from "@/components/studio/lightbox"
 import { StatsPanel } from "@/components/studio/stats-panel"
@@ -52,6 +52,7 @@ export default function Home() {
 
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
   const [generating, setGenerating] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<"view" | "select">("view")
@@ -230,9 +231,12 @@ export default function Home() {
     }
   }
 
-  const handleGenerate = async (prompt: string, aspectRatio: string) => {
-    if (!selectedProject) return
-    setGenerating(true)
+  const generateOne = async (
+    prompt: string,
+    aspectRatio: string,
+    useRefs: boolean,
+  ): Promise<GeneratedImage | null> => {
+    if (!selectedProject) return null
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -241,28 +245,55 @@ export default function Home() {
           projectId: selectedProject.id,
           prompt,
           aspectRatio,
+          useRefImages: useRefs,
         }),
       })
-
       if (res.ok) {
-        const newImage = await res.json()
-        setGeneratedImages((prev) => [newImage, ...prev])
+        return await res.json()
       } else {
-        const err = await res.json()
-        alert(err.error || "이미지 생성 실패")
+        const err = await res.json().catch(() => ({}))
+        console.error("생성 실패:", err)
+        return null
       }
     } catch (e) {
-      console.error("이미지 생성 실패:", e)
-      alert("이미지 생성 중 오류가 발생했습니다")
+      console.error("생성 오류:", e)
+      return null
+    }
+  }
+
+  const handleGenerateBatch = async (jobs: BatchJob[], aspectRatio: string) => {
+    if (!selectedProject || jobs.length === 0) return
+    const total = jobs.reduce((s, j) => s + j.count, 0)
+    setGenerating(true)
+    setBatchProgress({ done: 0, total })
+
+    let done = 0
+    let failed = 0
+    try {
+      for (const job of jobs) {
+        for (let i = 0; i < job.count; i++) {
+          const newImage = await generateOne(job.prompt, aspectRatio, job.useRefs)
+          if (newImage) {
+            setGeneratedImages((prev) => [newImage, ...prev])
+          } else {
+            failed++
+          }
+          done++
+          setBatchProgress({ done, total })
+        }
+      }
+      if (failed > 0) {
+        alert(`총 ${total}장 중 ${failed}장 생성에 실패했습니다`)
+      }
     } finally {
       setGenerating(false)
+      setBatchProgress(null)
     }
   }
 
   const handleRegenerate = async (image: GeneratedImage) => {
     setLightboxImage(null)
 
-    // 기존 이미지 삭제
     try {
       await fetch("/api/generated-images", {
         method: "DELETE",
@@ -274,7 +305,22 @@ export default function Home() {
       console.error("삭제 실패:", e)
     }
 
-    await handleGenerate(image.prompt_text, image.aspect_ratio || "1:1")
+    setGenerating(true)
+    setBatchProgress({ done: 0, total: 1 })
+    try {
+      const newImage = await generateOne(
+        image.prompt_text,
+        image.aspect_ratio || "1:1",
+        true,
+      )
+      if (newImage) {
+        setGeneratedImages((prev) => [newImage, ...prev])
+      }
+      setBatchProgress({ done: 1, total: 1 })
+    } finally {
+      setGenerating(false)
+      setBatchProgress(null)
+    }
   }
 
   const handleEditImage = async (image: GeneratedImage, editPrompt: string, prevImageUrl?: string) => {
@@ -470,10 +516,11 @@ export default function Home() {
                 <div className="border-t border-white/5" />
 
                 <GeneratePanel
-                  onGenerate={handleGenerate}
+                  onGenerateBatch={handleGenerateBatch}
                   generating={generating}
                   disabled={!selectedProject}
                   refImageCount={refImages.length}
+                  progress={batchProgress}
                 />
 
                 {editing && (

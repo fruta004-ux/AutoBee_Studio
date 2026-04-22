@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       editImageUrl,
       editHistory,
       prevImageUrl,
+      useRefImages = true,
     } = body
 
     if (!projectId || !prompt?.trim()) {
@@ -84,12 +85,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 참조 이미지 가져오기
-    const { data: refImages } = await supabase
-      .from("studio_ref_images")
-      .select("public_url, file_name")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: true })
+    // 참조 이미지 가져오기 (수정 모드이거나 useRefImages=true일 때만)
+    const shouldUseRefs = useRefImages || !!editImageUrl
+    const { data: refImages } = shouldUseRefs
+      ? await supabase
+          .from("studio_ref_images")
+          .select("public_url, file_name")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: true })
+      : { data: [] }
 
     const parts: any[] = []
 
