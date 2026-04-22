@@ -144,6 +144,12 @@ export function Gallery({
             return (
               <div
                 key={img.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "copy"
+                  e.dataTransfer.setData("application/x-studio-image-id", img.id)
+                  e.dataTransfer.setData("text/plain", img.id)
+                }}
                 onClick={() => {
                   if (viewMode === "view") {
                     onImageClick(img)

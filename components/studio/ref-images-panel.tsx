@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef } from "react"
-import { Plus, X, ImageIcon, Loader2 } from "lucide-react"
+import { useRef, useState } from "react"
+import { Plus, X, ImageIcon, Loader2, ImagePlus } from "lucide-react"
 
 interface RefImage {
   id: string
@@ -16,6 +16,7 @@ interface RefImagesPanelProps {
   refImages: RefImage[]
   onUpload: (file: File) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onDropGeneratedImage?: (imageId: string) => Promise<void>
   uploading: boolean
   disabled: boolean
 }
@@ -24,10 +25,13 @@ export function RefImagesPanel({
   refImages,
   onUpload,
   onDelete,
+  onDropGeneratedImage,
   uploading,
   disabled,
 }: RefImagesPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounter = useRef(0)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -40,8 +44,68 @@ export function RefImagesPanel({
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
+  const hasGeneratedImageDrag = (e: React.DragEvent) => {
+    return Array.from(e.dataTransfer.types).includes("application/x-studio-image-id")
+  }
+
+  const hasFileDrag = (e: React.DragEvent) => {
+    return Array.from(e.dataTransfer.types).includes("Files")
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!hasGeneratedImageDrag(e) && !hasFileDrag(e)) return
+    e.preventDefault()
+    dragCounter.current++
+    setIsDragOver(true)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!hasGeneratedImageDrag(e) && !hasFileDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "copy"
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0
+      setIsDragOver(false)
+    }
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setIsDragOver(false)
+
+    const imageId = e.dataTransfer.getData("application/x-studio-image-id")
+    if (imageId && onDropGeneratedImage) {
+      await onDropGeneratedImage(imageId)
+      return
+    }
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        if (f.type.startsWith("image/")) {
+          await onUpload(f)
+        }
+      }
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div
+      className={`space-y-3 rounded-xl transition-all ${
+        isDragOver ? "ring-2 ring-blue-400/60 bg-blue-500/5 -m-2 p-2" : ""
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ImageIcon className="w-4 h-4 text-white/40" />
@@ -49,6 +113,12 @@ export function RefImagesPanel({
             참조 이미지 ({refImages.length}/14)
           </span>
         </div>
+        {isDragOver && (
+          <div className="flex items-center gap-1.5 text-xs text-blue-300 animate-pulse">
+            <ImagePlus className="w-3.5 h-3.5" />
+            여기에 놓으면 참조에 추가됩니다
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -95,9 +165,9 @@ export function RefImagesPanel({
         className="hidden"
       />
 
-      {refImages.length === 0 && (
+      {refImages.length === 0 && !isDragOver && (
         <p className="text-xs text-white/20">
-          참조 이미지를 업로드하면 생성 시 함께 전송됩니다
+          참조 이미지를 업로드하거나 생성된 이미지를 드래그해서 추가하세요
         </p>
       )}
     </div>

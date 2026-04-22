@@ -540,6 +540,12 @@ export default function Home() {
                   refImages={refImages}
                   onUpload={handleUploadRef}
                   onDelete={handleDeleteRef}
+                  onDropGeneratedImage={async (imageId) => {
+                    const img = generatedImages.find((g) => g.id === imageId)
+                    if (img) {
+                      await handleAddToRefs(img)
+                    }
+                  }}
                   uploading={refUploading}
                   disabled={!selectedProject}
                 />
