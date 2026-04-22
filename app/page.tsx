@@ -8,11 +8,13 @@ import { GeneratePanel, type BatchJob } from "@/components/studio/generate-panel
 import { Gallery } from "@/components/studio/gallery"
 import { Lightbox } from "@/components/studio/lightbox"
 import { StatsPanel } from "@/components/studio/stats-panel"
+import { NotesPanel } from "@/components/studio/notes-panel"
 
 interface Project {
   id: string
   name: string
   description: string | null
+  notes?: string | null
   created_at: string
 }
 
@@ -131,6 +133,32 @@ export default function Home() {
       console.error("프로젝트 생성 실패:", e)
     }
   }
+
+  const handleSaveNotes = useCallback(
+    async (notes: string): Promise<boolean> => {
+      if (!selectedProject) return false
+      try {
+        const res = await fetch("/api/projects", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: selectedProject.id, notes }),
+        })
+        if (!res.ok) return false
+        const updated = await res.json()
+        setProjects((prev) =>
+          prev.map((p) => (p.id === updated.id ? { ...p, notes: updated.notes } : p)),
+        )
+        setSelectedProject((prev) =>
+          prev && prev.id === updated.id ? { ...prev, notes: updated.notes } : prev,
+        )
+        return true
+      } catch (e) {
+        console.error("메모 저장 실패:", e)
+        return false
+      }
+    },
+    [selectedProject],
+  )
 
   const handleDeleteProject = async (id: string) => {
     try {
@@ -548,6 +576,14 @@ export default function Home() {
                   }}
                   uploading={refUploading}
                   disabled={!selectedProject}
+                />
+
+                <div className="border-t border-white/5" />
+
+                <NotesPanel
+                  projectId={selectedProject.id}
+                  initialNotes={selectedProject.notes || ""}
+                  onSave={handleSaveNotes}
                 />
 
                 <div className="border-t border-white/5" />

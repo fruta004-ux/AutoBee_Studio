@@ -52,6 +52,43 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const { id, notes, name } = await request.json()
+
+    if (!id) {
+      return NextResponse.json({ error: "프로젝트 ID가 필요합니다" }, { status: 400 })
+    }
+
+    const supabase = getSupabase()
+    const updates: Record<string, unknown> = {}
+    if (typeof notes === "string") updates.notes = notes
+    if (typeof name === "string" && name.trim()) updates.name = name.trim()
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "수정할 내용이 없습니다" }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from("studio_projects")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const { id } = await request.json()
