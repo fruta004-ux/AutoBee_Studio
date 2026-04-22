@@ -580,14 +580,6 @@ export default function Home() {
 
                 <div className="border-t border-white/5" />
 
-                <NotesPanel
-                  projectId={selectedProject.id}
-                  initialNotes={selectedProject.notes || ""}
-                  onSave={handleSaveNotes}
-                />
-
-                <div className="border-t border-white/5" />
-
                 <GeneratePanel
                   onGenerateBatch={handleGenerateBatch}
                   generating={generating}
@@ -650,6 +642,15 @@ export default function Home() {
           open={statsOpen}
           onClose={() => setStatsOpen(false)}
         />
+
+        {selectedProject && (
+          <NotesPanel
+            projectId={selectedProject.id}
+            projectName={selectedProject.name}
+            initialNotes={selectedProject.notes || ""}
+            onSave={handleSaveNotes}
+          />
+        )}
       </div>
     </PasswordGate>
   )
