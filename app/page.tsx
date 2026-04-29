@@ -263,6 +263,7 @@ export default function Home() {
     prompt: string,
     aspectRatio: string,
     useRefs: boolean,
+    imageSize: string = "1K",
   ): Promise<GeneratedImage | null> => {
     if (!selectedProject) return null
     try {
@@ -273,6 +274,7 @@ export default function Home() {
           projectId: selectedProject.id,
           prompt,
           aspectRatio,
+          imageSize,
           useRefImages: useRefs,
         }),
       })
@@ -289,7 +291,11 @@ export default function Home() {
     }
   }
 
-  const handleGenerateBatch = async (jobs: BatchJob[], aspectRatio: string) => {
+  const handleGenerateBatch = async (
+    jobs: BatchJob[],
+    aspectRatio: string,
+    imageSize: string,
+  ) => {
     if (!selectedProject || jobs.length === 0) return
     const total = jobs.reduce((s, j) => s + j.count, 0)
     setGenerating(true)
@@ -300,7 +306,12 @@ export default function Home() {
     try {
       for (const job of jobs) {
         for (let i = 0; i < job.count; i++) {
-          const newImage = await generateOne(job.prompt, aspectRatio, job.useRefs)
+          const newImage = await generateOne(
+            job.prompt,
+            aspectRatio,
+            job.useRefs,
+            imageSize,
+          )
           if (newImage) {
             setGeneratedImages((prev) => [newImage, ...prev])
           } else {
@@ -340,6 +351,7 @@ export default function Home() {
         image.prompt_text,
         image.aspect_ratio || "1:1",
         true,
+        image.resolution || "1K",
       )
       if (newImage) {
         setGeneratedImages((prev) => [newImage, ...prev])

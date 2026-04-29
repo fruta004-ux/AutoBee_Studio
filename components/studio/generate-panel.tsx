@@ -12,7 +12,11 @@ export interface BatchJob {
 }
 
 interface GeneratePanelProps {
-  onGenerateBatch: (jobs: BatchJob[], aspectRatio: string) => Promise<void>
+  onGenerateBatch: (
+    jobs: BatchJob[],
+    aspectRatio: string,
+    imageSize: string,
+  ) => Promise<void>
   generating: boolean
   disabled: boolean
   refImageCount: number
@@ -25,6 +29,12 @@ const ASPECT_RATIOS = [
   { label: "16:9", value: "16:9" },
   { label: "4:3", value: "4:3" },
   { label: "3:4", value: "3:4" },
+]
+
+const IMAGE_SIZES = [
+  { label: "1K", value: "1K", hint: "기본" },
+  { label: "2K", value: "2K", hint: "고화질" },
+  { label: "4K", value: "4K", hint: "초고화질 ($0.24/장)" },
 ]
 
 interface PromptRow {
@@ -50,6 +60,7 @@ export function GeneratePanel({
 }: GeneratePanelProps) {
   const [rows, setRows] = useState<PromptRow[]>([newRow(refImageCount > 0)])
   const [aspectRatio, setAspectRatio] = useState("1:1")
+  const [imageSize, setImageSize] = useState("1K")
 
   const updateRow = (id: string, patch: Partial<PromptRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -75,33 +86,57 @@ export function GeneratePanel({
 
   const handleGenerate = async () => {
     if (validJobs.length === 0 || generating || disabled) return
-    await onGenerateBatch(validJobs, aspectRatio)
+    await onGenerateBatch(validJobs, aspectRatio, imageSize)
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-white/40" />
           <span className="text-sm font-medium text-white/70">이미지 생성</span>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-white/40">비율</span>
-          <div className="flex gap-1">
-            {ASPECT_RATIOS.map((ar) => (
-              <button
-                key={ar.value}
-                onClick={() => setAspectRatio(ar.value)}
-                className={`px-2 py-1 rounded text-xs transition-all ${
-                  aspectRatio === ar.value
-                    ? "bg-white text-black"
-                    : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60"
-                }`}
-              >
-                {ar.label}
-              </button>
-            ))}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-white/40">비율</span>
+            <div className="flex gap-1">
+              {ASPECT_RATIOS.map((ar) => (
+                <button
+                  key={ar.value}
+                  onClick={() => setAspectRatio(ar.value)}
+                  className={`px-2 py-1 rounded text-xs transition-all ${
+                    aspectRatio === ar.value
+                      ? "bg-white text-black"
+                      : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60"
+                  }`}
+                >
+                  {ar.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-white/40">해상도</span>
+            <div className="flex gap-1">
+              {IMAGE_SIZES.map((s) => (
+                <button
+                  key={s.value}
+                  onClick={() => setImageSize(s.value)}
+                  title={s.hint}
+                  className={`px-2 py-1 rounded text-xs transition-all ${
+                    imageSize === s.value
+                      ? s.value === "4K"
+                        ? "bg-amber-400 text-black"
+                        : "bg-white text-black"
+                      : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

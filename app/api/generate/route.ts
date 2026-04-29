@@ -72,11 +72,15 @@ export async function POST(request: NextRequest) {
       projectId,
       prompt,
       aspectRatio = "1:1",
+      imageSize = "1K",
       editImageUrl,
       editHistory,
       prevImageUrl,
       useRefImages = true,
     } = body
+
+    const validSizes = ["1K", "2K", "4K"]
+    const finalImageSize = validSizes.includes(imageSize) ? imageSize : "1K"
 
     if (!projectId || !prompt?.trim()) {
       return NextResponse.json(
@@ -141,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     const isEdit = !!editImageUrl
     console.log(
-      `[studio] ${isEdit ? "Editing" : "Generating"}: ${refImages?.length || 0} refs, ratio=${aspectRatio}${editHistory ? `, history=${editHistory.length}` : ""}`,
+      `[studio] ${isEdit ? "Editing" : "Generating"}: ${refImages?.length || 0} refs, ratio=${aspectRatio}, size=${finalImageSize}${editHistory ? `, history=${editHistory.length}` : ""}`,
     )
 
     const result = await retryWithBackoff(async () => {
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
               responseModalities: ["TEXT", "IMAGE"],
               imageConfig: {
                 aspectRatio,
+                imageSize: finalImageSize,
               },
             },
             safetySettings: [
@@ -227,6 +232,7 @@ export async function POST(request: NextRequest) {
         storage_path: storagePath,
         public_url: urlData.publicUrl,
         aspect_ratio: aspectRatio,
+        resolution: finalImageSize,
       })
       .select()
       .single()
