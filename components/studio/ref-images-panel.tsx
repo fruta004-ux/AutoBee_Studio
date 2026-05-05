@@ -167,7 +167,7 @@ export function RefImagesPanel({
 
       {refImages.length === 0 && !isDragOver && (
         <p className="text-xs text-white/20">
-          참조 이미지를 업로드하거나 생성된 이미지를 드래그해서 추가하세요
+          참조 이미지를 업로드하거나, 생성 이미지를 드래그하거나, Ctrl+V로 붙여넣을 수 있습니다
         </p>
       )}
     </div>

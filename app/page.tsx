@@ -117,6 +117,42 @@ export default function Home() {
     }
   }, [selectedProject, loadRefImages, loadGeneratedImages])
 
+  useEffect(() => {
+    if (!selectedProject) return
+
+    const handlePaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+          return
+        }
+      }
+
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      const imageFiles: File[] = []
+      for (const item of Array.from(items)) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile()
+          if (file) imageFiles.push(file)
+        }
+      }
+
+      if (imageFiles.length === 0) return
+      e.preventDefault()
+
+      for (const file of imageFiles) {
+        await handleUploadRef(file)
+      }
+    }
+
+    window.addEventListener("paste", handlePaste)
+    return () => window.removeEventListener("paste", handlePaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject])
+
   const handleCreateProject = async (name: string) => {
     try {
       const res = await fetch("/api/projects", {
